@@ -1596,8 +1596,6 @@ Node* Pipeblock_Changeobj(Node* it, int col, int direction)
 
 Node* changeObjLot(Node* it, int x, int y, int direction)
 {
-
-
 	SetCurrentCursorPos((it->obj.x + 1) * 2, it->obj.y + 1);
 	printf("  ");
 	// 현재 위치 공백
@@ -1627,7 +1625,6 @@ Node* changeObjLot(Node* it, int x, int y, int direction)
 }
 Node* thornMoveDirection(Node* it, int direction)
 {
-
 	switch (direction)
 	{
 	case 1:
