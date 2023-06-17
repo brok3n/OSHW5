@@ -4,6 +4,7 @@
 #include <time.h>
 #include "defines.h"
 #include "player.h"
+#include "block.h"
 #pragma warning(disable:4996)
 
 int gBoardHeight;
@@ -40,13 +41,32 @@ COORD StartPosition;
 void InitPlayer();
 int DetectCollisionForPlayer(int x, int y);
 int MovePlayer();
+void DiePlayer();
+
+//BLOCKMANAGE
+int UserBlockID[MAXUSERBLOCK] = { 0 };
+int CurrentUserBlock = 0;
+int page = 1;
+int bX, bY;
+int blockid = 0;
+int MODE = 0, prevblockid = -1;
+int prevbX = 0, prevbY = 0;
+int collosion_redraw = 0;
+void AddBlock(int blockid);
+void BlockListUpdate(int UseBlock);
+void BlockBuild(int key);
+void UserBlockManage();
+void BlockAllocator();
+void ShowBlock(char blockinfo[4][4], int color);
+void DeleteBlock(char blockinfo[4][4]);
+void DeleteAllBlock();
+void MakeBlock(char blockInfo[4][4]);
+int DetectCollisionForBlock(int x, int y, char blockInfo[4][4]);
 
 
 int main()
 {
 	srand(time(NULL));
-	ControlConsoleWindow();
-
 	ControlConsoleWindow();
 
 	int control;
@@ -906,5 +926,217 @@ void DiePlayer()
 		printf("●");
 		gameBoardInfo[p.y - 1][p.x / 2 - 1] = 900;
 	}
+}
 
+
+
+void AddBlock(int blockid)
+{
+	UserBlockID[CurrentUserBlock] = blockid;
+	CurrentUserBlock++;
+}
+void BlockListUpdate(int UseBlock)
+{
+	for (int i = UseBlock; i < MAXUSERBLOCK - 1; i++)
+	{
+		UserBlockID[i] = UserBlockID[i + 1];
+		if (UserBlockID[i + 1] == -1) {
+			UserBlockID[i] = -1;
+			break;
+		}
+	}
+	CurrentUserBlock--;
+}
+void BlockBuild(int key)
+{
+	// 충돌이 발생하면 빨간색 위치는 자유자재로 움직일수 있고 충돌시 빨강
+	// 충돌시 설치 불가능
+	int color = WHITE;
+	int categori = 1;
+	if (UserBlockID[blockid] == 28)
+		categori = 2;
+	else if (UserBlockID[blockid] == 29)
+		categori = 3;
+	else if (UserBlockID[blockid] == 30)
+		categori = 4;
+	else if (UserBlockID[blockid] == 31)
+		categori = 5;
+	else
+		categori = 1;
+	SetCurrentCursorPos(prevbX, prevbY);
+	switch (key)
+	{
+	case 49:
+		blockid = (page - 1) * 4;
+		break;
+	case 50:
+		blockid = (page - 1) * 4 + 1;
+		break;
+	case 51:
+		blockid = (page - 1) * 4 + 2;
+		break;
+	case 52:
+		blockid = (page - 1) * 4 + 3;
+		break;
+	case LARROW:
+		if (-bX + p.x <= 10 && bX > 2)
+			bX = bX - 2;
+
+		break;
+	case RARROW:
+		if (bX - p.x <= 10 && bX + 4 < 2 * gBoardWidth)
+			bX = bX + 2;
+
+		break;
+	case UARROW:
+		if (-bY + p.y <= 5 && bY > 1)
+			bY--;
+
+		break;
+	case DARROW:
+		if (bY - p.y <= 5 && bY + 2 < gBoardHeight)
+			bY++;
+
+		break;
+
+	case SPACE:
+		if (!(DetectCollisionForBlock(bX, bY, blockModel[prevblockid])))
+		{
+			UserBlockID[blockid] = -1;
+			//BlockListUpdate(blockid);
+
+			MakeBlock(blockModel[prevblockid], categori);
+			UserBlockManage();
+			prevblockid = -1;
+			MODE = 0;
+			DrawGameBoard();
+		}
+		break;
+	case L_ROTATE:
+		UserBlockID[blockid] = 4 * (UserBlockID[blockid] / 4) + (UserBlockID[blockid] + 3) % 4;
+
+		break;
+	case R_ROTATE:
+		UserBlockID[blockid] = 4 * (UserBlockID[blockid] / 4) + (UserBlockID[blockid] + 1) % 4;
+
+		break;
+	case BUILD:
+
+		break;
+	}
+
+	if (prevblockid != -1)
+	{
+		DeleteBlock(blockModel[prevblockid]);
+		if (collosion_redraw == 1)
+		{
+			DrawGameBoardPart();
+			//DrawGameBoard();
+			collosion_redraw = 0;
+		}
+	}
+	SetCurrentCursorPos(bX, bY);
+	if (UserBlockID[blockid] >= 28)
+		color = BLUE;
+	if ((DetectCollisionForBlock(bX, bY, blockModel[UserBlockID[blockid]])))
+	{
+		ShowBlock(blockModel[UserBlockID[blockid]], LIGHTRED);
+		collosion_redraw = 1;
+	}
+	else
+		ShowBlock(blockModel[UserBlockID[blockid]], color);
+	color = WHITE;
+	if (UserBlockID[blockid] == -1) {
+		BlockListUpdate(blockid);
+		UserBlockManage();
+	}
+	prevbX = bX, prevbY = bY;
+	prevblockid = UserBlockID[blockid];
+
+}
+void ShowBlock(char blockInfo[4][4], int color)
+{
+	int x, y;
+	COORD curPos = GetCurrentCursorPos();
+	for (y = 0; y < 4; y++) {
+		for (x = 0; x < 4; x++) {
+			SetCurrentCursorPos(curPos.X + (x * 2), curPos.Y + y);
+			if (blockInfo[y][x] == 1)
+			{
+				SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), color);
+				printf("■");
+			}
+		}
+	}
+	SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), WHITE);
+	SetCurrentCursorPos(curPos.X, curPos.Y);
+}
+
+void DeleteBlock(char blockInfo[4][4])
+{
+	int x, y;
+	COORD curPos = GetCurrentCursorPos();
+	for (y = 0; y < 4; y++) {
+		for (x = 0; x < 4; x++) {
+			SetCurrentCursorPos(curPos.X + (x * 2), curPos.Y + y);
+			if (blockInfo[y][x] == 1)
+				printf("  ");
+		}
+	}
+	SetCurrentCursorPos(curPos.X, curPos.Y);
+}
+void MakeBlock(char blockInfo[4][4], int blockCategori)
+{
+	//1 기본블럭 2~5 파이프블럭 6~ ?
+	int x, y;
+	COORD curPos = GetCurrentCursorPos();
+	curPos.X = curPos.X - 2;
+	curPos.Y--;
+	for (y = 0; y < 4; y++) {
+		for (x = 0; x < 4; x++) {
+			if (blockInfo[y][x] == 1)
+			{
+
+				if (blockCategori == 2)
+					gameBoardInfo[y + curPos.Y][x + curPos.X / 2] = 610;
+				else if (blockCategori == 3)
+					gameBoardInfo[y + curPos.Y][x + curPos.X / 2] = 620;
+				else if (blockCategori == 4)
+					gameBoardInfo[y + curPos.Y][x + curPos.X / 2] = 630;
+				else if (blockCategori == 5)
+					gameBoardInfo[y + curPos.Y][x + curPos.X / 2] = 640;
+				else
+					gameBoardInfo[y + curPos.Y][x + curPos.X / 2] = 100;
+
+			}
+		}
+	}
+	SetCurrentCursorPos(curPos.X, curPos.Y);
+}
+void DeleteAllBlock()
+{
+	int x, y;
+	COORD curPos = GetCurrentCursorPos();
+	for (y = 0; y < 4; y++) {
+		for (x = 0; x < 4; x++) {
+			SetCurrentCursorPos(curPos.X + (x * 2), curPos.Y + y);
+			printf("  ");
+		}
+	}
+	SetCurrentCursorPos(curPos.X, curPos.Y);
+}
+int DetectCollisionForBlock(int x, int y, char blockInfo[4][4])
+{
+	int x1, y1;
+	COORD curPos = GetCurrentCursorPos();
+	x = x - 2;
+	y--;
+	for (y1 = 0; y1 < 4; y1++) {
+		for (x1 = 0; x1 < 4; x1++) {
+			if (blockInfo[y1][x1] == 1 && gameBoardInfo[y1 + y][x1 + x / 2] != 000)
+				return 1;
+
+		}
+	}
+	return 0;
 }
