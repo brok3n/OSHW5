@@ -2,8 +2,11 @@
 #include <stdlib.h>
 #include <windows.h>
 #include <time.h>
+
+#include "block.h"
 #include "defines.h"
 #include "player.h"
+#include "object.h"
 #pragma warning(disable:4996)
 
 int gBoardHeight;
@@ -33,6 +36,9 @@ void ClearConsole();
 int gameBoardInfo[MAX_HEIGHT][MAX_WIDTH] = { 0 };
 int SideQuest = 0;
 int StageClear = 0;
+int StageNumber = 1;
+int StageClearTime = 0;
+int score;
 
 //PLAYER
 Player p;
@@ -40,6 +46,45 @@ COORD StartPosition;
 void InitPlayer();
 int DetectCollisionForPlayer(int x, int y);
 int MovePlayer();
+
+//BLOCKMANAGE
+int UserBlockID[MAXUSERBLOCK] = { 0 };
+int CurrentUserBlock = 0;
+int page = 1;
+int bX, bY;
+int blockid = 0;
+int MODE = 0, prevblockid = -1;
+int prevbX = 0, prevbY = 0;
+int collosion_redraw = 0;
+Node* Pipeblock_Changeobj(Node* it, int col, int direction);// 파이프블럭
+Node* changeObjLot(Node* it, int x, int y, int direction);
+void AddBlock(int blockid);
+void BlockListUpdate(int UseBlock);
+void BlockBuild(int key);
+void UserBlockManage();
+void BlockAllocator();
+void ShowBlock(char blockinfo[4][4], int color);
+void DeleteBlock(char blockinfo[4][4]);
+void DeleteAllBlock();
+void MakeBlock(char blockInfo[4][4]);
+int DetectCollisionForBlock(int x, int y, char blockInfo[4][4]);
+//pipeobjects
+int purple = 1; //
+void drawPurplePuzzle(int collosion);
+//MovingObjects
+int detectCollisionInDirection(int x, int y, int direction);
+int detectCollision(int x, int y);
+int parseInfo(int info, int choice);
+int detectCollisionMovingBlocks(int x, int y);
+void moveAll(Node* headNode);
+Node* searchCoord(Node* mObjListHead, int x, int y);
+Node* thornMoveDirection(Node* it, int direction);
+Node* mBlockMoveDirection(Node* it, int direction, int rotation);
+void addObj(mObj obj, Node* listHeader);
+void removeObj(Node* it);
+void removeObjWithoutShowing(Node* it);
+void freeAll(Node* headNode);
+int detectCollisionForMBlock(int x, int y, int rotation);
 
 
 int main()
@@ -907,4 +952,793 @@ void DiePlayer()
 		gameBoardInfo[p.y - 1][p.x / 2 - 1] = 900;
 	}
 
+}
+
+
+//BLOCK MANAGE
+void UserBlockManage()
+{
+	int x, y;
+	x = (gBoardWidth * 2) + 6, y = gBoardHeight - 11;
+
+
+	// 화면에 현재 페이지 유저블록 출력
+	for (int i = 4 * page - 4; i < 4 * page; i++)
+	{
+		SetCurrentCursorPos(x, y);
+
+		if (UserBlockID[i] == -1) {
+			DeleteAllBlock();
+			SetCurrentCursorPos(x, y + 2);
+			printf("empty");
+		}
+		else {
+			DeleteAllBlock();
+			if (UserBlockID[i] >= 28)
+				ShowBlock(blockModel[UserBlockID[i]], BLUE);
+			else
+				ShowBlock(blockModel[UserBlockID[i]], WHITE);
+		}
+		SetCurrentCursorPos(x + 2, y + 4);
+		printf("-0%d-", i % 4 + 1);
+
+		if (i % 2 == 0)
+			x += 14;
+		else
+		{
+			x -= 14;
+			y += 6;
+		}
+
+	}
+	SetCurrentCursorPos(gBoardWidth * 2 + 4, gBoardHeight);
+	printf(" page : %d/%d n:next m:prev", page, 5);
+}
+void BlockAllocator() // 초기블럭할당자.
+{
+	//blockID == 28 pipe
+
+	switch (StageNumber)
+	{
+	case 1:
+		for (int i = 0; i < MAXUSERBLOCK; i++)
+			UserBlockID[i] = -1;
+		AddBlock(0);
+		AddBlock(4);
+		AddBlock(8);
+		break;
+	case 2:
+		AddBlock(12);
+		AddBlock(16);
+		AddBlock((rand() % 28) % 4);
+		AddBlock((rand() % 28) % 4);
+		AddBlock((rand() % 28) % 4);
+		break;
+	case 3:
+		AddBlock((rand() % 28) % 4);
+		AddBlock(20);
+		AddBlock(24);
+		AddBlock(28);
+		break;
+	}
+	if (score /* - (30000 * StageNumber)*/ > 30000)
+		AddBlock((rand() % 28) % 4);
+}
+void AddBlock(int blockid)
+{
+	UserBlockID[CurrentUserBlock] = blockid;
+	CurrentUserBlock++;
+}
+void BlockListUpdate(int UseBlock)
+{
+	for (int i = UseBlock; i < MAXUSERBLOCK - 1; i++)
+	{
+		UserBlockID[i] = UserBlockID[i + 1];
+		if (UserBlockID[i + 1] == -1) {
+			UserBlockID[i] = -1;
+			break;
+		}
+	}
+	CurrentUserBlock--;
+}
+void BlockBuild(int key)
+{
+	// 충돌이 발생하면 빨간색 위치는 자유자재로 움직일수 있고 충돌시 빨강
+	// 충돌시 설치 불가능
+	int color = WHITE;
+	int categori = 1;
+	if (UserBlockID[blockid] == 28)
+		categori = 2;
+	else if (UserBlockID[blockid] == 29)
+		categori = 3;
+	else if (UserBlockID[blockid] == 30)
+		categori = 4;
+	else if (UserBlockID[blockid] == 31)
+		categori = 5;
+	else
+		categori = 1;
+	SetCurrentCursorPos(prevbX, prevbY);
+	switch (key)
+	{
+	case 49:
+		blockid = (page - 1) * 4;
+		break;
+	case 50:
+		blockid = (page - 1) * 4 + 1;
+		break;
+	case 51:
+		blockid = (page - 1) * 4 + 2;
+		break;
+	case 52:
+		blockid = (page - 1) * 4 + 3;
+		break;
+	case LARROW:
+		if (-bX + p.x <= 10 && bX > 2)
+			bX = bX - 2;
+
+		break;
+	case RARROW:
+		if (bX - p.x <= 10 && bX + 4 < 2 * gBoardWidth)
+			bX = bX + 2;
+
+		break;
+	case UARROW:
+		if (-bY + p.y <= 5 && bY > 1)
+			bY--;
+
+		break;
+	case DARROW:
+		if (bY - p.y <= 5 && bY + 2 < gBoardHeight)
+			bY++;
+
+		break;
+
+	case SPACE:
+		if (!(DetectCollisionForBlock(bX, bY, blockModel[prevblockid])))
+		{
+			UserBlockID[blockid] = -1;
+			//BlockListUpdate(blockid);
+
+			MakeBlock(blockModel[prevblockid], categori);
+			UserBlockManage();
+			prevblockid = -1;
+			MODE = 0;
+			DrawGameBoard();
+		}
+		break;
+	case L_ROTATE:
+		UserBlockID[blockid] = 4 * (UserBlockID[blockid] / 4) + (UserBlockID[blockid] + 3) % 4;
+
+		break;
+	case R_ROTATE:
+		UserBlockID[blockid] = 4 * (UserBlockID[blockid] / 4) + (UserBlockID[blockid] + 1) % 4;
+
+		break;
+	case BUILD:
+
+		break;
+	}
+
+	if (prevblockid != -1)
+	{
+		DeleteBlock(blockModel[prevblockid]);
+		if (collosion_redraw == 1)
+		{
+			DrawGameBoardPart();
+			//DrawGameBoard();
+			collosion_redraw = 0;
+		}
+	}
+	SetCurrentCursorPos(bX, bY);
+	if (UserBlockID[blockid] >= 28)
+		color = BLUE;
+	if ((DetectCollisionForBlock(bX, bY, blockModel[UserBlockID[blockid]])))
+	{
+		ShowBlock(blockModel[UserBlockID[blockid]], LIGHTRED);
+		collosion_redraw = 1;
+	}
+	else
+		ShowBlock(blockModel[UserBlockID[blockid]], color);
+	color = WHITE;
+	if (UserBlockID[blockid] == -1) {
+		BlockListUpdate(blockid);
+		UserBlockManage();
+	}
+	prevbX = bX, prevbY = bY;
+	prevblockid = UserBlockID[blockid];
+
+}
+void ShowBlock(char blockInfo[4][4], int color)
+{
+	int x, y;
+	COORD curPos = GetCurrentCursorPos();
+	for (y = 0; y < 4; y++) {
+		for (x = 0; x < 4; x++) {
+			SetCurrentCursorPos(curPos.X + (x * 2), curPos.Y + y);
+			if (blockInfo[y][x] == 1)
+			{
+				SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), color);
+				printf("■");
+			}
+		}
+	}
+	SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), WHITE);
+	SetCurrentCursorPos(curPos.X, curPos.Y);
+}
+
+void DeleteBlock(char blockInfo[4][4])
+{
+	int x, y;
+	COORD curPos = GetCurrentCursorPos();
+	for (y = 0; y < 4; y++) {
+		for (x = 0; x < 4; x++) {
+			SetCurrentCursorPos(curPos.X + (x * 2), curPos.Y + y);
+			if (blockInfo[y][x] == 1)
+				printf("  ");
+		}
+	}
+	SetCurrentCursorPos(curPos.X, curPos.Y);
+}
+void MakeBlock(char blockInfo[4][4], int blockCategori)
+{
+	//1 기본블럭 2~5 파이프블럭 6~ ?
+	int x, y;
+	COORD curPos = GetCurrentCursorPos();
+	curPos.X = curPos.X - 2;
+	curPos.Y--;
+	for (y = 0; y < 4; y++) {
+		for (x = 0; x < 4; x++) {
+			if (blockInfo[y][x] == 1)
+			{
+
+				if (blockCategori == 2)
+					gameBoardInfo[y + curPos.Y][x + curPos.X / 2] = 610;
+				else if (blockCategori == 3)
+					gameBoardInfo[y + curPos.Y][x + curPos.X / 2] = 620;
+				else if (blockCategori == 4)
+					gameBoardInfo[y + curPos.Y][x + curPos.X / 2] = 630;
+				else if (blockCategori == 5)
+					gameBoardInfo[y + curPos.Y][x + curPos.X / 2] = 640;
+				else
+					gameBoardInfo[y + curPos.Y][x + curPos.X / 2] = 100;
+
+			}
+		}
+	}
+	SetCurrentCursorPos(curPos.X, curPos.Y);
+}
+void DeleteAllBlock()
+{
+	int x, y;
+	COORD curPos = GetCurrentCursorPos();
+	for (y = 0; y < 4; y++) {
+		for (x = 0; x < 4; x++) {
+			SetCurrentCursorPos(curPos.X + (x * 2), curPos.Y + y);
+			printf("  ");
+		}
+	}
+	SetCurrentCursorPos(curPos.X, curPos.Y);
+}
+int DetectCollisionForBlock(int x, int y, char blockInfo[4][4])
+{
+	int x1, y1;
+	COORD curPos = GetCurrentCursorPos();
+	x = x - 2;
+	y--;
+	for (y1 = 0; y1 < 4; y1++) {
+		for (x1 = 0; x1 < 4; x1++) {
+			if (blockInfo[y1][x1] == 1 && gameBoardInfo[y1 + y][x1 + x / 2] != 000)
+				return 1;
+
+		}
+	}
+	return 0;
+}
+//PURPLE
+void drawPurplePuzzle(int collosion) {
+
+	int x = 0, y = 0;
+	if (StageNumber == 3)
+	{
+		if (collosion == 1)
+		{
+			if (purple == 1)
+				purple = 0;
+			else
+				purple = 1;
+		}
+		if (purple == 1)
+		{
+			x = 7, y = 0;
+			for (; y <= 4; y++)
+				gameBoardInfo[y][x] = 110;
+			gameBoardInfo[y - 1][x - 2] = 120;
+
+			x = 30, y = 0;
+			gameBoardInfo[33][35] = 0;
+			for (x = 21; x <= 31; x++)
+				for (y = 2; y <= 4; y++)
+					gameBoardInfo[y][x] = 0;
+		}
+		else
+		{
+			x = 7, y = 0;
+			for (; y <= 4; y++)
+				gameBoardInfo[y][x] = 0;
+
+			gameBoardInfo[y - 1][x - 2] = 0;
+
+			gameBoardInfo[33][35] = 120;
+			x = 30, y = 0;
+			for (x = 21; x <= 31; x++)
+				for (y = 2; y <= 4; y++)
+					gameBoardInfo[y][x] = 110;
+		}
+		DrawGameBoard();
+	}
+}
+
+//OBJECTS
+int detectCollision(int x, int y) { // 이동블럭 충돌체크까지 (이동블럭의 중심 제외 나머지 부분은 일반블럭과 동일한 100 리턴)
+	if (detectCollisionMovingBlocks(x, y) == 1)
+	{
+		return 100;
+	}
+	return(gameBoardInfo[y][x]);
+}
+
+int detectCollisionInDirection(int x, int y, int direction)
+{
+	switch (direction)
+	{
+	case 1:
+		return(detectCollision(x, y - 1));
+	case 2:
+		return(detectCollision(x + 1, y));
+	case 3:
+		return(detectCollision(x, y + 1));
+	case 4:
+		return(detectCollision(x - 1, y));
+	default:
+		break;
+	}
+	return 0;
+}
+
+int detectCollisionMovingBlocks(int x, int y) { // 해당 좌표에 이동블럭의 중심을 제외한 양 날개부분이 존재하는지 검사, 이 함수 구현의 편의를 위해 gameboard 테두리 한칸씩은 일반 블럭으로 채워넣는것이 좋아보임
+	int info = gameBoardInfo[y - 1][x];
+
+	int info_id = parseInfo(info, 0);
+	int info_rotation = parseInfo(info, 2);
+
+	if (info_id == 5 && info_rotation % 2 == 1) {
+		return 1;
+	}
+
+	info = gameBoardInfo[y + 1][x];
+
+	info_id = parseInfo(info, 0);
+	info_rotation = parseInfo(info, 2);
+
+	if (info_id == 5 && info_rotation % 2 == 1) {
+		return 1;
+	}
+
+	info = gameBoardInfo[y][x + 1];
+
+	info_id = parseInfo(info, 0);
+	info_rotation = parseInfo(info, 2);
+
+	if (info_id == 5 && info_rotation % 2 == 0) {
+		return 1;
+	}
+
+	info = gameBoardInfo[y][x - 1];
+
+	info_id = parseInfo(info, 0);
+	info_rotation = parseInfo(info, 2);
+
+	if (info_id == 5 && info_rotation % 2 == 0) {
+		return 1;
+	}
+
+	return 0;
+
+}
+
+// choice : 0 for id, 1 for direction, 2 for rotation
+int parseInfo(int info, int choice) {
+	switch (choice) {
+	case 0:
+		return (info / 100);
+	case 1:
+		return (info % 100 / 10);
+	case 2:
+		return (info % 10);
+	default:
+		return (info / 100);
+	}
+}
+
+// ******** 이동블럭의 날개는 id 5, 이동방향id 0의 더미블럭으로 구현
+
+void moveAll(Node* headNode) {
+	Node* it = headNode;
+	DWORD curTick = GetTickCount();
+	while (it->nextNode != NULL)
+	{
+		int con = 0;
+		int colCheck = 0;
+		if (it->obj.delay <= (curTick - it->lastUpdateTick))
+		{
+			int col;
+			int objType = parseInfo(it->obj.objId, 0);
+			int direction = parseInfo(it->obj.objId, 1);
+			int rotation = parseInfo(it->obj.objId, 2);
+			switch (objType)
+			{
+			case 3:
+				col = detectCollisionInDirection(it->obj.x, it->obj.y, direction);
+				if (gameBoardInfo[it->obj.y][it->obj.x] != it->obj.objId) {
+					if (gameBoardInfo[it->obj.y][it->obj.x] == 900) {
+						DiePlayer();
+					}
+					con = 1;
+					it = it->nextNode;
+					removeObjWithoutShowing(it->prevNode);
+					break;
+				}
+				if (col != 0 && col != 1000)
+				{
+					colCheck = 1;
+
+					if (col == 900 && p.invincibility == 0)
+						DiePlayer();
+					else  if (col == 610 || col == 620 || col == 630 || col == 640)// 파이프블럭과 닿는부분
+					{
+						it = Pipeblock_Changeobj(it, col, direction);
+						if ((it->obj.x + 1) * 2 == p.x, it->obj.y + 1 == p.y)
+							DiePlayer();
+						colCheck = 0;
+					}
+					else if (col == 120) // 보라색
+					{
+						drawPurplePuzzle(1);
+					}
+				}
+				else
+				{
+					it = thornMoveDirection(it, direction);
+				}
+				break;
+			case 4:
+
+				if (detectCollisionInDirection(it->obj.x, it->obj.y, direction) == 0)
+				{
+					int _x = (direction + 1) % 2 * (direction - 3) * (-1);
+					int _y = direction % 2 * (direction - 2);
+					mObj shoot = { 300 + direction * 10,it->obj.x + _x,it->obj.y + _y,100 };
+					gameBoardInfo[shoot.y][shoot.x] = shoot.objId;
+					SetCurrentCursorPos((shoot.x + 1) * 2, shoot.y + 1);
+					switch (direction)
+					{
+					case 1:
+						printf("△");
+						break;
+					case 2:
+						printf("▷");
+						break;
+					case 3:
+						printf("▽");
+						break;
+					case 4:
+						printf("◁");
+						break;
+					}
+					addObj(shoot, headNode);
+				}
+				break;
+			case 5:
+				if (detectCollisionForMBlock(it->obj.x + (direction + 1) % 2 * (direction - 3) * (-1), it->obj.y + direction % 2 * (direction - 2), rotation) % 10 == -1) {
+					if (DetectCollisionForPlayer((p.x + (direction + 1) % 2 * (direction - 3) * (-2)) / 2, p.y + direction % 2 * (direction - 2)) == 0) {
+						SetCurrentCursorPos(p.x, p.y);
+						//캐릭터가 지나간자리를 공백으로만들기위해
+						printf("  ");
+						gameBoardInfo[p.y - 1][p.x / 2 - 1] = 0;
+						p.x += (direction + 1) % 2 * (direction - 3) * (-2);
+						p.y += direction % 2 * (direction - 2);
+					}
+					else if (DetectCollisionForPlayer((p.x + (direction + 1) % 2 * (direction - 3) * (-2)) / 2, p.y + direction % 2 * (direction - 2)) == 1) {
+						it->obj.objId = objType * 100 + (direction + 2) * 10 + rotation;
+						if (parseInfo(it->obj.objId, 1) > 4) {
+							it->obj.objId -= 40;
+						}
+						break;
+					}
+					else if (DetectCollisionForPlayer((p.x + (direction + 1) % 2 * (direction - 3) * (-2)) / 2, p.y + direction % 2 * (direction - 2)) == -1) {
+						DiePlayer();
+					}
+				}
+				if (detectCollisionForMBlock(it->obj.x + (direction + 1) % 2 * (direction - 3) * (-1), it->obj.y + direction % 2 * (direction - 2), rotation) <= 0) {
+					mBlockMoveDirection(it, direction, rotation);
+				}
+				else {
+					it->obj.objId = objType * 100 + (direction + 2) * 10 + rotation;
+					if (parseInfo(it->obj.objId, 1) > 4) {
+						it->obj.objId -= 40;
+					}
+					break;
+				}
+			case 10:
+				if (gameBoardInfo[it->obj.y][it->obj.x] == 0) {
+					gameBoardInfo[it->obj.y][it->obj.x] = 1000;
+				}
+
+				break;
+			}
+
+
+			it->lastUpdateTick = GetTickCount();
+		}
+		if (con == 1) {
+			continue;
+		}
+		if ((it->obj.objId != 0 && parseInfo(it->obj.objId, 0) != 4) && ((it->obj.x < 1 || it->obj.x > gBoardWidth) || (it->obj.y < 1 || it->obj.y > gBoardHeight)))
+		{
+			colCheck = 1;
+		}
+
+		it = it->nextNode;
+		if (colCheck == 1 && parseInfo(it->prevNode->obj.objId, 0) == 3)
+		{
+			removeObj(it->prevNode);
+		}
+	}
+}
+
+void addObj(mObj _obj, Node* listHeader) {
+	Node* firstNode = listHeader->nextNode;
+	Node* node = (Node*)malloc(sizeof(Node));
+	node->obj = _obj;
+	node->nextNode = firstNode;
+	node->prevNode = listHeader;
+	firstNode->prevNode = node;
+	listHeader->nextNode = node;
+	node->lastUpdateTick = GetTickCount();
+}
+
+void removeObj(Node* it) {
+	Node* prev = it->prevNode;
+	Node* next = it->nextNode;
+	prev->nextNode = next;
+	next->prevNode = prev;
+	int x, y;
+	x = it->obj.x;
+	y = it->obj.y;
+	gameBoardInfo[y][x] -= it->obj.objId;
+	SetCurrentCursorPos((x + 1) * 2, y + 1);
+	printf("  ");
+	free(it);
+}
+void removeObjWithoutShowing(Node* it) {
+	Node* prev = it->prevNode;
+	Node* next = it->nextNode;
+	prev->nextNode = next;
+	next->prevNode = prev;
+	int x, y;
+	x = it->obj.x;
+	y = it->obj.y;
+	gameBoardInfo[y][x] -= it->obj.objId;
+	free(it);
+}
+Node* Pipeblock_Changeobj(Node* it, int col, int direction)
+{
+	int x = 0, y = 0;
+	switch (col)
+	{
+	case 610:
+		if (direction == 3)
+		{
+			x = 2, y = 2;
+			it->obj.objId = 320;
+			direction = 2;
+		}
+		else
+		{
+			x = -2, y = -2;
+			it->obj.objId = 310;
+			direction = 1;
+		}break;
+	case 620:
+		if (direction == 2)
+		{
+			x = 2, y = -2;
+			it->obj.objId = 310;
+			direction = 1;
+		}
+		else {
+			x = -2, y = 2;
+			it->obj.objId = 340;
+			direction = 4;
+		}
+		break;
+	case 630:
+		if (direction == 1) {
+			x = -2, y = -2;
+			it->obj.objId = 340;
+			direction = 4;
+		}
+		else {
+			x = 2, y = 2;
+			it->obj.objId = 330;
+			direction = 3;
+		}
+		break;
+	case 640:
+		if (direction == 4)
+		{
+			x = -2, y = 2;
+			it->obj.objId = 330;
+			direction = 3;
+		}
+		else
+		{
+
+			x = 2, y = -2;
+			it->obj.objId = 320;
+			direction = 2;
+			break;
+		}
+	}
+	it = changeObjLot(it, x, y, direction);
+	return it;
+}
+
+Node* changeObjLot(Node* it, int x, int y, int direction)
+{
+
+
+	SetCurrentCursorPos((it->obj.x + 1) * 2, it->obj.y + 1);
+	printf("  ");
+	// 현재 위치 공백
+	gameBoardInfo[it->obj.y + y][it->obj.x + x] += it->obj.objId;
+	gameBoardInfo[it->obj.y][it->obj.x] = 0;
+	it->obj.x += x;
+	it->obj.y += y;
+	SetCurrentCursorPos((it->obj.x + 1) * 2, it->obj.y + 1);
+
+	switch (direction)
+	{
+	case 1:
+		SetCurrentCursorPos((it->obj.x + 1) * 2, it->obj.y + 1);
+		printf("△");
+		break;
+	case 2:
+		printf("▷");
+		break;
+	case 3:
+		printf("▽");
+		break;
+	case 4:
+		printf("◁");
+		break;
+	}
+	return it;
+}
+Node* thornMoveDirection(Node* it, int direction)
+{
+
+	switch (direction)
+	{
+	case 1:
+		SetCurrentCursorPos((it->obj.x + 1) * 2, it->obj.y);
+		printf("△");
+		SetCurrentCursorPos((it->obj.x + 1) * 2, it->obj.y + 1);
+
+		printf("  ");
+		gameBoardInfo[it->obj.y - 1][it->obj.x] += it->obj.objId;
+		gameBoardInfo[it->obj.y][it->obj.x] -= it->obj.objId;
+		it->obj.y -= 1;
+		break;
+	case 2:
+		SetCurrentCursorPos((it->obj.x + 2) * 2, it->obj.y + 1);
+		printf("▷");
+		SetCurrentCursorPos((it->obj.x + 1) * 2, it->obj.y + 1);
+		printf("  ");
+		gameBoardInfo[it->obj.y][it->obj.x + 1] += it->obj.objId;
+		gameBoardInfo[it->obj.y][it->obj.x] -= it->obj.objId;
+		it->obj.x += 1;
+		break;
+	case 3:
+		SetCurrentCursorPos((it->obj.x + 1) * 2, it->obj.y + 2);
+		printf("▽");
+		SetCurrentCursorPos((it->obj.x + 1) * 2, it->obj.y + 1);
+		printf("  ");
+		gameBoardInfo[it->obj.y + 1][it->obj.x] += it->obj.objId;
+		gameBoardInfo[it->obj.y][it->obj.x] -= it->obj.objId;
+		it->obj.y += 1;
+		break;
+	case 4:
+		SetCurrentCursorPos((it->obj.x) * 2, it->obj.y + 1);
+		printf("◁");
+		SetCurrentCursorPos((it->obj.x + 1) * 2, it->obj.y + 1);
+		printf("  ");
+		gameBoardInfo[it->obj.y][it->obj.x - 1] += it->obj.objId;
+		gameBoardInfo[it->obj.y][it->obj.x] -= it->obj.objId;
+		it->obj.x -= 1;
+		break;
+	}
+
+	return it;
+}
+Node* searchCoord(Node* mObjListHead, int x, int y) {
+	Node* it = mObjListHead->nextNode;
+	while (it->nextNode != NULL) {
+		if (it->obj.x == x && it->obj.y == y) {
+			return it;
+		}
+	}
+	return NULL;
+}
+Node* mBlockMoveDirection(Node* it, int direction, int rotation) {
+	int x = it->obj.x - 1;
+	int y = it->obj.y - 1;
+
+	int dx = (direction + 1) % 2 * (direction - 3) * (-1);
+	int dy = direction % 2 * (direction - 2);
+
+	for (int i = 0; i < 3; i++) {
+		for (int j = 0; j < 3; j++) {
+			if (movingBlocks[rotation % 2][i][j] == 1) {
+				gameBoardInfo[y + i][x + j] = 0;
+				SetCurrentCursorPos((x + j + 1) * 2, y + i + 1);
+				printf("  ");
+			}
+		}
+	}
+
+	it->obj.x += dx;
+	it->obj.y += dy;
+	x = it->obj.x - 1;
+	y = it->obj.y - 1;
+
+	for (int i = 0; i < 3; i++) {
+		for (int j = 0; j < 3; j++) {
+			if (movingBlocks[rotation % 2][i][j] == 1) {
+				gameBoardInfo[y + i][x + j] = 500;
+				SetCurrentCursorPos((x + j + 1) * 2, y + i + 1);
+				printf("▤");
+			}
+		}
+		gameBoardInfo[it->obj.y][it->obj.x] = it->obj.objId;
+	}
+
+
+	//이동하는 좌표에 투사체 삭제, 이동하는 좌표에 플레이어 밀어내기 추가필요
+}
+
+void freeAll(Node* headNode) {
+	Node* it = headNode->nextNode;
+	while (it->nextNode != NULL) {
+		it = it->nextNode;
+		removeObj(it->prevNode);
+	}
+}
+
+int detectCollisionForMBlock(int x, int y, int rotation) {
+	x--;
+	y--;
+	int check = 0;
+	for (int i = 0; i < 3; i++) {
+		for (int j = 0; j < 3; j++) {
+			if (gameBoardInfo[y + i][x + j] != 0 && gameBoardInfo[y + i][x + j] != 900 && parseInfo(gameBoardInfo[y + i][x + j], 0) != 3 && parseInfo(gameBoardInfo[y + i][x + j], 0) != 5 && movingBlocks[rotation % 2][i][j] == 1) {
+				check = 1;
+				break;
+			}
+			if (check != 1 && gameBoardInfo[y + i][x + j] == 900) {
+				check = -1;
+			}
+		}
+	}
+	return check;
 }

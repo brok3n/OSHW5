@@ -1,7 +1,5 @@
 #pragma once
 
-#pragma once
-
 //define 및 enum은 대문자로 통일해주세요
 
 //DIRECTION
