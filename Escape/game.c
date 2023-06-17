@@ -15,6 +15,9 @@ int gBoardWidth;
 clock_t start1, finish1, start2, finish2;
 double duration1, duration2;
 
+void StatusPrint();
+void PrintPlayer();
+
 
 //SYSTEM
 COORD GetCurrentCursorPos();
@@ -40,6 +43,10 @@ int StageClear = 0;
 int StageNumber = 1;
 int StageClearTime = 0;
 int score;
+void InitStageInfo();
+int LoadStage(Node* mObjListHead);
+void DrawGameBoard();
+void ClearGameBoard();
 
 //PLAYER
 Player p;
@@ -49,27 +56,6 @@ int DetectCollisionForPlayer(int x, int y);
 int MovePlayer();
 void DiePlayer();
 
-//BLOCKMANAGE
-int UserBlockID[MAXUSERBLOCK] = { 0 };
-int CurrentUserBlock = 0;
-int page = 1;
-int bX, bY;
-int blockid = 0;
-int MODE = 0, prevblockid = -1;
-int prevbX = 0, prevbY = 0;
-int collosion_redraw = 0;
-void AddBlock(int blockid);
-void BlockListUpdate(int UseBlock);
-void BlockBuild(int key);
-void UserBlockManage();
-void BlockAllocator();
-void ShowBlock(char blockinfo[4][4], int color);
-void DeleteBlock(char blockinfo[4][4]);
-void DeleteAllBlock();
-void MakeBlock(char blockInfo[4][4]);
-int DetectCollisionForBlock(int x, int y, char blockInfo[4][4]);
-
-//BLOCKMANAGE
 int UserBlockID[MAXUSERBLOCK] = { 0 };
 int CurrentUserBlock = 0;
 int page = 1;
@@ -155,7 +141,6 @@ void SetCurrentCursorPos(int x, int y)
 }
 
 
-//DRAW
 void ControlConsoleWindow()
 {
 	CONSOLE_CURSOR_INFO curInfo;
@@ -309,8 +294,6 @@ int ShowGame()
 					bY = p.y + 2;
 
 			}
-			if (MODE == 0)
-				ControlCharacter(key);
 
 			switch (key)
 			{
@@ -1237,6 +1220,373 @@ void DiePlayer()
 }
 
 
+//MAP
+//스테이지 진입전 초기화해줘야 할 정보들
+void InitStageInfo()
+{
+	SideQuest = 0;
+	StageClear = 0;
+}
+int LoadStage(Node* mObjListHead)
+{
+	InitStageInfo();
+
+	char fileName[20];
+	FILE* fp;
+	int width, height;
+
+	sprintf(fileName, "Map/stage%d.txt", StageNumber);
+
+	fp = fopen(fileName, "r");
+	if (fp == NULL)
+		return -1;
+
+	fscanf(fp, "%d %d %d", &width, &height, &StageClearTime);
+	gBoardWidth = width;
+	gBoardHeight = height;
+
+	for (int y = 0; y < gBoardHeight; y++)
+	{
+		for (int x = 0; x < gBoardWidth; x++)
+		{
+			fscanf(fp, "%d", &gameBoardInfo[y][x]);
+
+			mObj obj;
+			switch (parseInfo(gameBoardInfo[y][x], 0)) {
+			case 4:
+				obj.objId = gameBoardInfo[y][x];
+				obj.x = x;
+				obj.y = y;
+				obj.delay = gameBoardInfo[y][x] % 10 * 250;
+				addObj(obj, mObjListHead);
+				break;
+			case 5:
+				obj.objId = gameBoardInfo[y][x];
+				obj.x = x;
+				obj.y = y;
+				obj.delay = 800;
+				addObj(obj, mObjListHead);
+				switch (parseInfo(obj.objId, 2)) {
+				case 2:
+				case 4:
+					gameBoardInfo[y][x + 1] = 500; // <-실행안됨. 수정필요
+					gameBoardInfo[y][x - 1] = 500;
+					break;
+				case 3:
+				case 1:
+					gameBoardInfo[y + 1][x] = 500; // <-실행안됨. 수정필요
+					gameBoardInfo[y - 1][x] = 500;
+					break;
+				}
+
+				break;
+			case 10:
+				obj.objId = gameBoardInfo[y][x];
+				obj.x = x;
+				obj.y = y;
+				obj.delay = 0;
+				addObj(obj, mObjListHead);
+				break;
+			}
+
+
+		}
+	}
+
+	fclose(fp);
+}
+void DrawGameBoard()
+{
+	int x, y;
+	int cursX, cursY;
+
+	for (y = 1; y <= gBoardHeight; y++)
+	{
+		for (x = 1; x <= gBoardWidth; x++)
+		{
+			cursX = x * 2/*+2*/;
+			cursY = y/*+1*/;
+			SetCurrentCursorPos(cursX, cursY);
+
+			int temp, hundred, ten, one;
+
+			temp = gameBoardInfo[y - 1][x - 1];
+			one = temp % 10;
+			temp /= 10;
+			ten = temp % 10;
+			temp /= 10;
+			hundred = temp % 10;
+
+			switch (hundred)
+			{
+			case 0:
+				printf("  ");
+				break;
+			case 1:
+				switch (ten) {
+				case 0:
+					printf("■");
+					break;
+				case 1:
+					SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), PURPLE);
+					printf("■");
+					SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), WHITE);
+					break;
+				case 2:
+					SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), PURPLE);
+					printf("●");
+					SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), WHITE);
+					break;
+				}
+			case 2:
+				printf("□");
+				break;
+			case 3:
+				switch (ten)
+				{
+				case UP:
+					printf("▲");
+					break;
+				case DOWN:
+					printf("▼");
+					break;
+				case RIGHT:
+					printf("▶");
+					break;
+				case LEFT:
+					printf("◀");
+					break;
+				}
+				break;
+			case 4:
+				printf("▣");
+				//방향 결정 필요
+				break;
+			case 5:
+				printf("▤");
+				//방향, 거리 결정 필요
+
+				break;
+			case 6:
+				SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), BLUE);
+				printf("■");
+				SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), WHITE);
+				//방향 결정 필요
+				break;
+			case 7:
+				switch (ten)
+				{
+				case 1:
+					SetCurrentCursorPos(x * 2, y);
+					SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), BLUE);
+					printf("♣");    //중력무시
+					SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), WHITE);
+					break;
+				case 2:
+					SetCurrentCursorPos(x * 2, y);
+					SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), PURPLE);
+					printf("♠");    //무적
+					SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), WHITE);
+					break;
+				case 3:
+					SetCurrentCursorPos(x * 2, y);
+					SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), RED);
+					printf("♥");
+					SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), WHITE);
+				}
+				//사이드퀘스트 가산 필요
+				break;
+				//아이템 종류 결정 필요
+				break;
+			case 8:
+				switch (ten)
+				{
+				case 1:
+					SetCurrentCursorPos(x * 2, y);
+					SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), YELLOW);
+					printf("★");
+					SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), WHITE);
+					break;
+				case 2:
+					p.x = x * 2;
+					p.y = y;
+					StartPosition.X = p.x;
+					StartPosition.Y = p.y;
+					SetCurrentCursorPos(x * 2, y);
+					printf("●");
+					break;
+				case 3:
+					SetCurrentCursorPos(x * 2, y);
+					SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), GREEN);
+					printf("※");
+					SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), WHITE);
+				}
+				//사이드퀘스트 가산 필요
+				break;
+			case 9:
+				printf("  ");
+				//클리어포인트
+				break;
+			case 10:
+				printf("  ");
+				//이동블럭 전환점
+				break;
+			}
+		}
+	}
+}
+void DrawGameBoardPart()
+{
+	int cursX, cursY;
+	int x, y;
+	COORD curPos = GetCurrentCursorPos();
+	for (y = 0; y < 4; y++) {
+		for (x = 0; x < 4; x++) {
+			SetCurrentCursorPos(curPos.X + (x * 2), curPos.Y + y);
+
+			if (curPos.X + (x * 2) > gBoardWidth * 2 || curPos.Y + y > gBoardHeight)
+				continue;
+			int temp, hundred, ten, one;
+
+			temp = gameBoardInfo[curPos.Y + y - 1][curPos.X / 2 + x - 1];
+			one = temp % 10;
+			temp /= 10;
+			ten = temp % 10;
+			temp /= 10;
+			hundred = temp % 10;
+
+			switch (hundred)
+			{
+			case 0:
+				printf("  ");
+				break;
+			case 1:
+				switch (ten) {
+				case 0:
+					printf("■");
+					break;
+				case 1:
+					SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), PURPLE);
+					printf("■");
+					SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), WHITE);
+					break;
+				case 2:
+					SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), PURPLE);
+					printf("●");
+					SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), WHITE);
+					break;
+				}
+			case 2:
+				break;
+			case 3:
+				switch (ten)
+				{
+				case UP:
+					printf("▲");
+					break;
+				case DOWN:
+					printf("▼");
+					break;
+				case RIGHT:
+					printf("▶");
+					break;
+				case LEFT:
+					printf("◀");
+					break;
+				}
+				break;
+			case 4:
+				printf("▣");
+				//방향 결정 필요
+				break;
+			case 5:
+				printf("▤");
+				//방향, 거리 결정 필요
+
+				break;
+			case 6:
+				SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), BLUE);
+				printf("■");
+				SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), WHITE);
+				//방향 결정 필요
+				break;
+			case 7:
+				switch (ten)
+				{
+				case 1:
+					//SetCurrentCursorPos(x * 2, y);
+					SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), BLUE);
+					printf("♣");    //중력무시
+					SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), WHITE);
+					break;
+				case 2:
+					//SetCurrentCursorPos(x * 2, y);
+					SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), PURPLE);
+					printf("♠");    //무적
+					SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), WHITE);
+					break;
+				case 3:
+					//SetCurrentCursorPos(x * 2, y);
+					SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), RED);
+					printf("♥");
+					SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), WHITE);
+				}
+				//사이드퀘스트 가산 필요
+				break;
+				//아이템 종류 결정 필요
+				break;
+			case 8:
+				switch (ten)
+				{
+				case 1:
+					//SetCurrentCursorPos(x * 2, y);
+					SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), YELLOW);
+					printf("★");
+					SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), WHITE);
+					break;
+				case 2:
+					//p.x = x * 2;
+					//p.y = y;
+					//StartPosition.X = p.x;
+					//StartPosition.Y = p.y;
+					//SetCurrentCursorPos(x * 2, y);
+					printf("●");
+					break;
+				case 3:
+					//SetCurrentCursorPos(x * 2, y);
+					SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), GREEN);
+					printf("※");
+					SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), WHITE);
+				}
+				//사이드퀘스트 가산 필요
+				break;
+			case 9:
+				printf("  ");
+				//클리어포인트
+				break;
+			case 10:
+				printf("  ");
+				//이동블럭 전환점
+				break;
+			}
+		}
+	}
+}
+void ClearGameBoard()
+{
+	int x, y;
+	int cursX, cursY;
+
+	for (y = 1; y <= gBoardHeight; y++)
+	{
+		for (x = 1; x <= gBoardWidth; x++)
+		{
+			gameBoardInfo[y - 1][x - 1] = 0;
+		}
+	}
+}
+
+
 //BLOCK MANAGE
 void UserBlockManage()
 {
@@ -2020,4 +2370,48 @@ int detectCollisionForMBlock(int x, int y, int rotation) {
 		}
 	}
 	return check;
+}
+
+
+void StatusPrint()
+{
+	//화면아래에 게임보드인포출력
+	SetCurrentCursorPos(0, gBoardHeight + 3); //(x,y)
+	for (int i = 0; i < gBoardHeight; i++) {
+		for (int j = 0; j < gBoardWidth; j++) {
+			if (gameBoardInfo[i][j] == 0) {
+				printf("000 ");
+			}
+			else {
+				printf("%d ", gameBoardInfo[i][j]);
+			}
+		}
+		printf("\n");
+		//SetCurrentCursorPos(65, i + 1);
+	}
+	//플레이어 x,y출력
+	SetCurrentCursorPos(gBoardWidth * 2 + 40, 0);
+	printf("p.x:%d p.y:%d p.t_jump:%.1lf", p.x, p.y, p.t_jump);
+	SetCurrentCursorPos(gBoardWidth * 2 + 40, 1);
+	printf("아래gameBoardInfo[p.y][p.x / 2 - 1]:%d",
+		gameBoardInfo[p.y][p.x / 2 - 1]);
+	SetCurrentCursorPos(gBoardWidth * 2 + 40, 2);
+	printf("오gameBoardInfo[p.y - 1][p.x / 2 - 2]:%d",
+		gameBoardInfo[p.y - 1][p.x / 2 - 2]);
+	SetCurrentCursorPos(gBoardWidth * 2 + 40, 3);
+	printf("왼gameBoardInfo[p.y - 1][p.x / 2]:%d",
+		gameBoardInfo[p.y - 1][p.x / 2]);
+	SetCurrentCursorPos(gBoardWidth * 2 + 40, 4);
+	printf("플레이어gameBoardInfo[p.y - 1][p.x / 2 - 1]:%d",
+		gameBoardInfo[p.y - 1][p.x / 2 - 1]);
+}
+void PrintPlayer()
+{
+	SetCurrentCursorPos(p.x, p.y);
+	printf("%s", "●");
+	/*if (p.x % 2 == 0) {
+		gameBoardInfo[p.y - 1][p.x / 2 - 1] = 900;
+	}*/
+	gameBoardInfo[p.y - 1][p.x / 2 - 1] = 900;
+	Sleep(80);
 }
