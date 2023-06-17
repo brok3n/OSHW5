@@ -6,11 +6,8 @@
 #include "block.h"
 #include "defines.h"
 #include "player.h"
-<<<<<<< HEAD
 #include "block.h"
-=======
 #include "object.h"
->>>>>>> feature_object
 #pragma warning(disable:4996)
 
 int gBoardHeight;
@@ -976,12 +973,6 @@ void DiePlayer()
 	}
 }
 
-<<<<<<< HEAD
-
-
-=======
-}
-
 
 //BLOCK MANAGE
 void UserBlockManage()
@@ -1052,7 +1043,6 @@ void BlockAllocator() // 초기블럭할당자.
 	if (score /* - (30000 * StageNumber)*/ > 30000)
 		AddBlock((rand() % 28) % 4);
 }
->>>>>>> feature_object
 void AddBlock(int blockid)
 {
 	UserBlockID[CurrentUserBlock] = blockid;
@@ -1262,8 +1252,6 @@ int DetectCollisionForBlock(int x, int y, char blockInfo[4][4])
 		}
 	}
 	return 0;
-<<<<<<< HEAD
-=======
 }
 //PURPLE
 void drawPurplePuzzle(int collosion) {
@@ -1769,5 +1757,4 @@ int detectCollisionForMBlock(int x, int y, int rotation) {
 		}
 	}
 	return check;
->>>>>>> feature_object
 }
