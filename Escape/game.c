@@ -41,6 +41,7 @@ COORD StartPosition;
 void InitPlayer();
 int DetectCollisionForPlayer(int x, int y);
 int MovePlayer();
+void DiePlayer();
 
 //BLOCKMANAGE
 int UserBlockID[MAXUSERBLOCK] = { 0 };
@@ -66,8 +67,6 @@ int DetectCollisionForBlock(int x, int y, char blockInfo[4][4]);
 int main()
 {
 	srand(time(NULL));
-	ControlConsoleWindow();
-
 	ControlConsoleWindow();
 
 	int control;
@@ -927,7 +926,6 @@ void DiePlayer()
 		printf("¡Ü");
 		gameBoardInfo[p.y - 1][p.x / 2 - 1] = 900;
 	}
-
 }
 
 
