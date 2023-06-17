@@ -248,7 +248,120 @@ int ShowMainMenu()
 }
 int ShowGame()
 {
-	
+	int time = 0;
+	int key = 0;
+
+	DWORD countMsTime = GetTickCount();
+
+	mObj dummy = { 0,0,0,0 };
+
+	Node mObjListTail = { .obj = dummy, .nextNode = NULL, .prevNode = NULL };
+	Node mObjListHead = { .obj = dummy, .nextNode = &mObjListTail, .prevNode = NULL };
+	mObjListTail.prevNode = &mObjListHead;
+
+	InitPlayer();
+	LoadStage(&mObjListHead);
+	DrawGameUI();
+	DrawGameBoard();
+	UserBlockManage();
+	purple = 1;
+	drawPurplePuzzle(0);
+	while (1)
+	{
+		//플레이어 이동함수 여기넣었습니다
+		if (MODE == 0)
+			MovePlayer();
+		PrintPlayer();
+
+		DWORD curMsTime = GetTickCount();
+
+		if ((curMsTime - countMsTime) * 0.001f >= 1)
+		{
+			countMsTime = GetTickCount();
+			time++;
+
+			UpdateTimeUI(time);
+		}
+
+		if (_kbhit() != 0)
+		{
+			key = _getch();
+			if (key == BUILD && gameBoardInfo[p.y][p.x / 2 - 1] != 000)     //0 -> MOVE MODE | 1 -> BUILD MOVE
+			{
+				if (MODE == 1)
+				{
+					MODE = 0;
+					SetCurrentCursorPos(bX, bY);
+					DeleteBlock(blockModel[prevblockid]);
+				}
+				else
+				{
+					prevblockid = -1;
+					MODE = 1;
+				}
+				if (p.x > gBoardWidth)
+					bX = p.x - 4;
+				else
+					bX = p.x + 4;
+				if (p.y > gBoardHeight / 2)
+					bY = p.y - 2;
+				else
+					bY = p.y + 2;
+
+			}
+			if (MODE == 0)
+				ControlCharacter(key);
+
+			switch (key)
+			{
+			case ESCAPE:
+				if (GamePause() == 0)
+				{
+					ClearConsole();
+					return 0;
+				}
+				else
+				{
+					countMsTime = GetTickCount();
+					DrawGameBoard();
+				}
+				break;
+			case KB_N:
+				if (page >= 5)
+					break;
+				page++;
+				UserBlockManage();
+				break;
+			case KB_M:
+				if (page <= 1)
+					break;
+				page--;
+				UserBlockManage();
+				break;
+			}
+
+		}
+
+		if (MODE == 1 && key != -1 && key != BUILD)
+			BlockBuild(key);
+
+		if (p.isDead)
+		{
+			ShowGameOver();
+			ClearConsole();
+			return 0;
+		}
+		if (StageClear)
+		{
+			ShowStageClear(time);
+			return 1;
+		}
+
+		moveAll(&mObjListHead);
+		//StatusPrint();
+		key = -1;
+	}
+	freeAll(&mObjListHead);
 }
 void ShowResult()
 {
@@ -335,28 +448,96 @@ void DrawGameUI()
 	SetCurrentCursorPos((gBoardWidth * 2) + (statusBoardWidth / 2), 3);
 	printf("%02d:%02d", 0, 0);
 	SetCurrentCursorPos((gBoardWidth * 2) + (statusBoardWidth / 2), 5);
-	//for (int i = 1; i <= 3; i++)
-	//{
-	//	SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), YELLOW);
-	//	if (i <= SideQuest)
-	//		printf("★");
-	//}
-	//SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), WHITE);
+	for (int i = 1; i <= 3; i++)
+	{
+		SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), YELLOW);
+		if (i <= SideQuest)
+			printf("★");
+	}
+	SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), WHITE);
 
-	//if (p.isExtraLife)
-	//{
-	//	SetCurrentCursorPos((gBoardWidth * 2) + (statusBoardWidth / 2) + 2, 7);
-	//	SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), RED);
-	//	printf("♥ ");
-	//}
+	if (p.isExtraLife)
+	{
+		SetCurrentCursorPos((gBoardWidth * 2) + (statusBoardWidth / 2) + 2, 7);
+		SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), RED);
+		printf("♥ ");
+	}
 }
 void UpdateTimeUI(int time)
 {
-	
+	int minute = time / 60;
+	int second = time % 60;
+
+	SetCurrentCursorPos((gBoardWidth * 2) + 14, 3);
+	printf("      ");
+
+	SetCurrentCursorPos((gBoardWidth * 2) + 14, 3);
+	printf("%02d:%02d", minute, second);
+	//printf("\n x:%d y:%d", p.x, p.y);
+
 }
 void UpdateGameUI()
 {
-	
+	int statusBoardWidth = 28;
+	int statusBoardHeight = gBoardHeight;
+
+	//아이템 남은시간 표시
+	if (p.defyingGravity == 1 && p.invincibility == 0) {
+		SetCurrentCursorPos((gBoardWidth * 2) + (statusBoardWidth / 2) - 6, 4);
+		printf("                   ");
+		SetCurrentCursorPos((gBoardWidth * 2) + (statusBoardWidth / 2) - 6, 4);
+		printf("중력무시 남은시간:%d", DEFYING_GRAVITY_TIME - (int)duration1);
+		SetCurrentCursorPos((gBoardWidth * 2) + (statusBoardWidth / 2) - 6, 5);
+		printf("                   ");
+	}
+	else if (p.defyingGravity == 0 && p.invincibility == 1) {
+		SetCurrentCursorPos((gBoardWidth * 2) + (statusBoardWidth / 2) - 6, 4);
+		printf("                   ");
+		SetCurrentCursorPos((gBoardWidth * 2) + (statusBoardWidth / 2) - 6, 4);
+		printf("  무적 남은시간:%d", INVINCIBILITY_TIME - (int)duration2);
+		SetCurrentCursorPos((gBoardWidth * 2) + (statusBoardWidth / 2) - 6, 5);
+		printf("                   ");
+	}
+	else if (p.defyingGravity == 1 && p.invincibility == 1) {
+		SetCurrentCursorPos((gBoardWidth * 2) + (statusBoardWidth / 2) - 6, 4);
+		printf("                   ");
+		SetCurrentCursorPos((gBoardWidth * 2) + (statusBoardWidth / 2) - 6, 4);
+		printf("중력무시 남은시간:%d", DEFYING_GRAVITY_TIME - (int)duration1);
+		SetCurrentCursorPos((gBoardWidth * 2) + (statusBoardWidth / 2) - 6, 5);
+		printf("                   ");
+		SetCurrentCursorPos((gBoardWidth * 2) + (statusBoardWidth / 2) - 6, 5);
+		printf("  무적 남은시간:%d", INVINCIBILITY_TIME - (int)duration2);
+	}
+	else if (p.defyingGravity == 0 && p.invincibility == 0) {
+		SetCurrentCursorPos((gBoardWidth * 2) + (statusBoardWidth / 2) - 6, 4);
+		printf("                   ");
+		SetCurrentCursorPos((gBoardWidth * 2) + (statusBoardWidth / 2) - 6, 5);
+		printf("                   ");
+	}
+	//사이드퀘스트 표시
+	SetCurrentCursorPos((gBoardWidth * 2) + (statusBoardWidth / 2), 5);
+	SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), YELLOW);
+	for (int i = 1; i <= 3; i++)
+	{
+		if (i <= SideQuest)
+		{
+			printf("★");
+		}
+	}
+	SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), WHITE);
+
+	//1회부활 아이템 표시
+	SetCurrentCursorPos((gBoardWidth * 2) + (statusBoardWidth / 2) + 2, 6);
+	if (p.isExtraLife)
+	{
+		SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), RED);
+		printf("♥");
+		SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), WHITE);
+	}
+	else
+	{
+		printf("  ");
+	}
 }
 int GamePause()
 {
@@ -504,7 +685,89 @@ void ShowGameOver()
 }
 void ShowStageClear(int time)
 {
-	
+	for (int y = gBoardHeight / 2 - 6; y <= gBoardHeight / 2 + 6; y++)
+	{
+		for (int x = (gBoardWidth * 2) / 2 - 15; x <= (gBoardWidth * 2) / 2 + 15; x++)
+		{
+			SetCurrentCursorPos(x, y);
+			printf("  ");
+		}
+	}
+
+	for (int y = gBoardHeight / 2 - 5; y <= gBoardHeight / 2 + 5; y += 10)
+	{
+		for (int x = gBoardWidth - 15; x <= gBoardWidth + 15; x++)
+		{
+			SetCurrentCursorPos(x, y);
+			printf("─");
+		}
+	}
+	for (int y = gBoardHeight / 2 - 5; y <= gBoardHeight / 2 + 5; y++)
+	{
+		for (int x = gBoardWidth - 15; x <= gBoardWidth + 15; x += 30)
+		{
+			SetCurrentCursorPos(x, y);
+			printf("│");
+		}
+	}
+
+	SetCurrentCursorPos(gBoardWidth - 15, gBoardHeight / 2 - 5);
+	printf("┌");
+	SetCurrentCursorPos(gBoardWidth + 15, gBoardHeight / 2 - 5);
+	printf("┐");
+	SetCurrentCursorPos(gBoardWidth + 15, gBoardHeight / 2 + 5);
+	printf("┘");
+	SetCurrentCursorPos(gBoardWidth - 15, gBoardHeight / 2 + 5);
+	printf("└");
+
+	//시간보다 빨리 클리어하면 빨리 클리어 한 만큼 추가 점수, 늦게 클리어하면 늦게 클리어 한 만큼 감소
+	int additional = time > StageClearTime ? (StageClearTime - time) * 100 : ((StageClearTime - time) / (float)StageClearTime) * 3000;
+	//감소된 시간이 20000 이상일경우 보정
+	additional = additional < -25000 ? -25000 : additional;
+	//별 1개당 2500 추가, 블럭 1개 아낄때마다 500점
+	additional = additional + (SideQuest * 2500) + (CurrentUserBlock * 500);
+	score = 22500 + additional + (SideQuest * 2500);
+
+	SetCurrentCursorPos((gBoardWidth * 2) / 2 - 10, gBoardHeight / 2 - 3);
+	printf("S T A G E   C L E A R!");
+
+	SetCurrentCursorPos((gBoardWidth * 2) / 2 - 10, gBoardHeight / 2 - 1);
+	printf("SCORE");
+	SetCurrentCursorPos((gBoardWidth * 2) / 2 - 10, gBoardHeight / 2);
+	printf("%d", score);
+
+	SetCurrentCursorPos((gBoardWidth * 2) / 2 + 6, gBoardHeight / 2 - 1);
+	printf("GRADE");
+	SetCurrentCursorPos((gBoardWidth * 2) / 2 + 6, gBoardHeight / 2);
+	SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), YELLOW);
+	for (int i = 1; i <= 3; i++)
+		if (score > i * 10000)
+			printf("★");
+	SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), WHITE);
+
+	SetCurrentCursorPos((gBoardWidth * 2) / 2 - 8, gBoardHeight / 2 + 2);
+	printf("PRESS ANY KEY TO");
+	SetCurrentCursorPos((gBoardWidth * 2) / 2 - 9, gBoardHeight / 2 + 3);
+	printf("MOVE TO NEXT STAGE");
+
+
+
+	StageNumber++;
+
+
+	Sleep(1500);
+
+	while (1)
+	{
+		if (_kbhit() != 0)
+		{
+			ClearConsole();
+			ClearGameBoard();
+			break;
+		}
+	}
+	BlockAllocator();
+	return 0;
 }
 void ClearConsole()
 {
@@ -516,7 +779,7 @@ void ClearConsole()
 			printf("  ");
 		}
 	}
-}	
+}
 
 
 
